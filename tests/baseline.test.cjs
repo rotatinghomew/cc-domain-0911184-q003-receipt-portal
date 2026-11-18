@@ -76,3 +76,14 @@ test('incomplete forms never create a receipt', async () => {
     assert.equal(portal.state.receipts.length, 0);
   } finally { await portal.close(); }
 });
+
+test('expired account cannot save or submit authorization', async () => {
+  const portal = createPortal();
+  try {
+    const url = await portal.start();
+    portal.state.expiredAccounts.add('studio-a');
+    assert.equal((await fetch(url + '/?account=studio-a')).status, 401);
+    assert.equal((await fetch(url + '/submit', { method: 'POST', body: JSON.stringify(license) })).status, 401);
+    assert.equal(portal.state.receipts.length, 0);
+  } finally { await portal.close(); }
+});

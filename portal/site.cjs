@@ -2,7 +2,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 
 function createPortal() {
-  const state = { drafts: new Map(), receipts: [], dropAfterSubmit: false, requests: [] };
+  const state = { drafts: new Map(), receipts: [], dropAfterSubmit: false, requests: [], expiredAccounts: new Set() };
   const keyOf = (account, business) => JSON.stringify([account, business]);
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -11,11 +11,16 @@ function createPortal() {
     const business = url.searchParams.get('business') || 'license-01';
     const key = keyOf(account, business);
     if (request.method === 'GET' && url.pathname === '/') {
+      if (state.expiredAccounts.has(account)) {
+        response.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end('<h1>会话已过期</h1><p>请重新登录合作方账号</p>');
+        return;
+      }
       const draft = state.drafts.get(key) || { title: '', scope: '', version: 0, operator: 'robot' };
       const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       response.end(`<!doctype html><html lang="zh"><title>授权办理</title><h1>授权办理</h1>
-        <p data-account>${escape(account)}</p><form id="license">
+        <p data-account>${escape(account)}</p><p data-operator>${escape(draft.operator)}</p><form id="license">
         <label>作品<input name="title" value="${escape(draft.title)}"></label>
         <label>授权范围<textarea name="scope">${escape(draft.scope)}</textarea></label>
         <label>审核版本<input name="version" type="number" value="${draft.version}"></label>
@@ -51,6 +56,7 @@ function createPortal() {
       send(422, { error: 'incomplete_license' });
       return;
     }
+    if (state.expiredAccounts.has(payload.account)) { send(401, { error: 'session_expired' }); return; }
     if (url.pathname === '/draft' || url.pathname === '/takeover') {
       const draft = { ...payload, operator: url.pathname === '/takeover' ? 'human' : 'robot' };
       state.drafts.set(identity, draft);
