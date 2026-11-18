@@ -9,6 +9,20 @@ const { savePending } = require('../robot/drafts.cjs');
 const { verifySaved } = require('../robot/authorization.cjs');
 const license = { account: 'studio-a', business: 'case-1', title: '归途', scope: '华东网络发行', version: 1 };
 
+test('a persistent portal can reuse an explicitly assigned listener port', async () => {
+  const first = createPortal();
+  const address = await first.start();
+  const port = Number(new URL(address).port);
+  await first.close();
+  const second = createPortal();
+  try {
+    assert.equal(await second.start(port), address);
+    assert.equal((await fetch(address)).status, 200);
+  } finally {
+    await second.close();
+  }
+});
+
 test('saved draft must match the approved authorization', () => {
   assert.equal(verifySaved(license, { ...license }).version, 1);
   assert.throws(() => verifySaved(license, { ...license, version: 2 }), /version/);
